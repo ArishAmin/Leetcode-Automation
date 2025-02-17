@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LeetCode AI Solver Bot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .problem-card {
+            transition: transform 0.2s;
+        }
+        .problem-card:hover {
+            transform: translateY(-2px);
+        }
+        .loading-spinner {
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-white">
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">
+                🤖 LeetCode AI Solver Bot
+            </h1>
+            <p class="text-gray-300">Powered by StarCoder AI</p>
+        </div>
+        
+        <div class="glass-card rounded-xl p-8 mb-8">
+            <div class="mb-8">
+                <label for="problemCount" class="block text-lg font-medium mb-2">
+                    Number of Problems to Solve
+                </label>
+                <div class="flex gap-4">
+                    <input type="number" 
+                           id="problemCount" 
+                           value="1"
+                           min="1"
+                           max="10"
+                           class="w-full p-3 bg-gray-800 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white">
+                    <button id="startBot" 
+                            class="px-8 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">
+                        Start Bot
+                    </button>
+                    <button id="stopBot"
+                            class="px-8 py-3 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition-colors"
+                            disabled>
+                        Stop Bot
+                    </button>
+                </div>
+            </div>
+            
+            <div id="loading" class="hidden">
+                <div class="flex items-center justify-center gap-3 p-4">
+                    <div class="loading-spinner w-6 h-6 border-3 border-blue-500 border-t-transparent rounded-full"></div>
+                    <p class="text-gray-300">Bot is running...</p>
+                </div>
+            </div>
+            
+            <div id="status" class="hidden mb-6">
+                <h2 class="text-xl font-semibold mb-2">Current Status</h2>
+                <p id="statusText" class="text-gray-300"></p>
+            </div>
+            
+            <div id="currentProblem" class="hidden mb-6">
+                <h2 class="text-xl font-semibold mb-4">Current Problem</h2>
+                <div class="glass-card p-4 rounded-lg">
+                    <p id="problemTitle" class="font-medium mb-2"></p>
+                    <p id="problemDifficulty" class="text-sm text-gray-300"></p>
+                    <a id="problemUrl" href="#" target="_blank" class="text-blue-400 hover:text-blue-300 mt-2 inline-block"></a>
+                </div>
+            </div>
+        </div>
+        
+        <div id="solvedProblems" class="hidden">
+            <h2 class="text-2xl font-bold mb-6">Solved Problems</h2>
+            <div id="solvedProblemsList" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <!-- Solved problems will be inserted here -->
+            </div>
+        </div>
+        
+        <div id="error" class="hidden mt-4 p-4 bg-red-900/50 text-red-200 rounded-lg"></div>
+    </div>
+    
+    <script>
+        const startBot = document.getElementById('startBot');
+        const stopBot = document.getElementById('stopBot');
+        const loading = document.getElementById('loading');
+        const status = document.getElementById('status');
+        const statusText = document.getElementById('statusText');
+        const currentProblem = document.getElementById('currentProblem');
+        const problemTitle = document.getElementById('problemTitle');
+        const problemDifficulty = document.getElementById('problemDifficulty');
+        const problemUrl = document.getElementById('problemUrl');
+        const solvedProblems = document.getElementById('solvedProblems');
+        const solvedProblemsList = document.getElementById('solvedProblemsList');
+        const error = document.getElementById('error');
+        
+        let statusInterval;
+        
+        startBot.addEventListener('click', async () => {
+            const problemCount = document.getElementById('problemCount').value;
+            
+            try {
+                const response = await fetch('/start-bot', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ problemCount })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    startBot.disabled = true;
+                    stopBot.disabled = false;
+                    loading.classList.remove('hidden');
+                    error.classList.add('hidden');
+                    statusInterval = setInterval(updateStatus, 1000);
+                } else {
+                    showError(data.error);
+                }
+            } catch (e) {
+                showError('Failed to start bot');
+            }
+        });
+        
+        stopBot.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/stop-bot', {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    startBot.disabled = false;
+                    stopBot.disabled = true;
+                    loading.classList.add('hidden');
+                    clearInterval(statusInterval);
+                }
+            } catch (e) {
+                showError('Failed to stop bot');
+            }
+        });
+        
+        async function updateStatus() {
+            try {
+                const response = await fetch('/bot-status');
+                const data = await response.json();
+                
+                status.classList.remove('hidden');
+                statusText.textContent = data.status;
+                
+                if (data.current_problem) {
+                    currentProblem.classList.remove('hidden');
+                    problemTitle.textContent = data.current_problem.title;
+                    problemDifficulty.textContent = `Difficulty: ${data.current_problem.difficulty || 'Unknown'}`;
+                    problemUrl.href = data.current_problem.url;
+                    problemUrl.textContent = 'View Problem';
+                }
+                
+                if (data.solved_problems && data.solved_problems.length > 0) {
+                    solvedProblems.classList.remove('hidden');
+                    solvedProblemsList.innerHTML = data.solved_problems
+                        .map(problem => `
+                            <div class="problem-card glass-card p-4 rounded-lg">
+                                <h3 class="font-semibold text-lg mb-2">${problem.title}</h3>
+                                <p class="text-sm ${getDifficultyColor(problem.difficulty)} mb-2">
+                                    ${problem.difficulty || 'Unknown'} Difficulty
+                                </p>
+                                <div class="flex gap-2">
+                                    <a href="${problem.url}" target="_blank" 
+                                       class="text-blue-400 hover:text-blue-300 text-sm">
+                                        View Problem
+                                    </a>
+                                    ${problem.solution ? `
+                                        <span class="text-gray-400">|</span>
+                                        <a href="#" onclick="viewSolution('${encodeURIComponent(problem.solution)}')"
+                                           class="text-green-400 hover:text-green-300 text-sm">
+                                            View Solution
+                                        </a>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `)
+                        .join('');
+                }
+                
+                if (!data.is_running) {
+                    startBot.disabled = false;
+                    stopBot.disabled = true;
+                    loading.classList.add('hidden');
+                    clearInterval(statusInterval);
+                }
+            } catch (e) {
+                showError('Failed to update status');
+            }
+        }
+        
+        function getDifficultyColor(difficulty) {
+            const colors = {
+                'Easy': 'text-green-400',
+                'Medium': 'text-yellow-400',
+                'Hard': 'text-red-400'
+            };
+            return colors[difficulty] || 'text-gray-400';
+        }
+        
+        function viewSolution(solution) {
+            const decodedSolution = decodeURIComponent(solution);
+            alert(decodedSolution); // In a real app, use a modal
+        }
+        
+        function showError(message) {
+            error.textContent = message;
+            error.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
